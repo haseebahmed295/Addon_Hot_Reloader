@@ -14,6 +14,7 @@ import importlib
 from bpy.types import Operator, Panel, AddonPreferences
 from bpy.props import FloatProperty, EnumProperty
 from functools import partial
+from .module_reload import ModuleReloader
 
 class ReloadAddon(Operator):
     """Reload an activated add-on."""
@@ -51,7 +52,12 @@ class ReloadAddon(Operator):
             
         # Reload and register the addon.
         print(f"Reloading: {package}")
-        importlib.reload(module)
+        
+        if addon_prefs.reload_submodules:
+            reloader = ModuleReloader()
+            reloader.reload_all(module)
+        else:
+            importlib.reload(module)
 
         print(f"Registering: {package}")
         try:
@@ -99,7 +105,10 @@ class StartTimerOperator(Operator):
     @staticmethod
     def reload_after_interval(time):
         """Callback for the timer to reload the addon."""
-        bpy.ops.script.reload_addon()
+        try:
+            bpy.ops.script.reload_addon()
+        except Exception:
+            pass
         return time
 
 class HotReloaderMenu(Panel):
@@ -118,11 +127,13 @@ class HotReloaderMenu(Panel):
         col.scale_y = 1.5
         col.label(text="Select Add-on to Reload:")  
         col.label(text="Set Time Interval (seconds):")
+        col.label(text="Reload Submodules:")
         col.label(text="Start Timer:")
         col = row.column(align=True)
         col.scale_y = 1.5
         col.prop(addon_prefs, "package_name" , text="")
         col.prop(addon_prefs, "time_interval" , text="")
+        col.prop(addon_prefs, "reload_submodules" , text="")
         if StartTimerOperator._is_running:
             col.operator("script.start_timer", text="Stop Timer", icon='PAUSE' , depress = True)
             return
@@ -149,6 +160,11 @@ class HotReloaderPreferences(AddonPreferences):
         description="Time in seconds after which to reload the addon",
         default=5.0,
         min=0.1
+    )
+    reload_submodules: bpy.props.BoolProperty(
+        name="Reload Submodules",
+        description="Also reload submodules of the addon\n This may cause issues if the addon is not designed to be reloaded \n See addon code for how it works.",
+        default=False
     )
     
 def draw_hot_reloader_button(self, context):
